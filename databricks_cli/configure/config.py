@@ -24,11 +24,47 @@
 import uuid
 import click
 import six
+from datetime import datetime
 
 from databricks_cli.click_types import ContextObject
-from databricks_cli.configure.provider import get_config, ProfileConfigProvider
+from databricks_cli.configure.provider import get_config, ProfileConfigProvider, \
+    update_and_persist_config
 from databricks_cli.utils import InvalidConfigurationError
 from databricks_cli.sdk import ApiClient
+
+
+def _using_azure_ad_auth(config):
+    return config.refresh_token
+
+
+def _adal_refresh_error_message(profile):
+    if profile:
+        return ("Unable to refresh token. Please re-run "
+                "'databricks configure --azure-ad --profile {}'").format(profile)
+    else:
+        return ("Unable to refresh token. Please re-run "
+                "'databricks configure --azure-ad'")
+
+
+def _update_adal_token(config, profile):
+    from databricks_cli.configure import adal_utils
+
+    if datetime.now() > datetime.strptime(config.token_expires_on, "%Y-%m-%d %H:%M:%S.%f"):
+        try:
+            token = adal_utils.adal_refresh_token(
+                authority=config.tenant_id,
+                resource=adal_utils.AZURE_DATABRICKS_RESOURCE_ID,
+                client_id=config.client_id,
+                refresh_token=config.refresh_token, 
+                verify_ssl=config.insecure
+            )
+            config.token = token['accessToken']
+            config.token_expires_on = token['expiresOn']
+            config.refresh_token = token['refreshToken']
+            update_and_persist_config(profile, config)
+        except:
+            raise RuntimeError(_adal_refresh_error_message(profile))
+    return config
 
 
 def provide_api_client(function):
@@ -50,6 +86,10 @@ def provide_api_client(function):
             config = get_config()
         if not config or not config.is_valid:
             raise InvalidConfigurationError.for_profile(profile)
+        
+        if _using_azure_ad_auth(config):
+            config = _update_adal_token(config, profile)
+
         kwargs['api_client'] = _get_api_client(config, command_name)
 
         return function(*args, **kwargs)
@@ -84,7 +124,10 @@ def profile_option(f):
 def _get_api_client(config, command_name=""):
     verify = config.insecure is None
     if config.is_valid_with_token:
+        headers = {}
+        if config.org_id:
+            headers['X-Databricks-Org-Id'] = config.org_id
         return ApiClient(host=config.host, token=config.token, verify=verify,
-                         command_name=command_name)
+                         command_name=command_name, default_headers=headers)
     return ApiClient(user=config.username, password=config.password,
                      host=config.host, verify=verify, command_name=command_name)

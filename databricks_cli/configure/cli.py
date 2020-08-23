@@ -26,7 +26,7 @@ import click
 from click import ParamType
 
 from databricks_cli.configure.provider import DatabricksConfig, update_and_persist_config, \
-    ProfileConfigProvider
+    ProfileConfigProvider, DEFAULT_SECTION
 from databricks_cli.utils import CONTEXT_SETTINGS
 from databricks_cli.configure.config import profile_option, get_profile_from_context, debug_option
 
@@ -66,7 +66,7 @@ def _configure_cli_password(profile, insecure):
 def _configure_azure_ad(profile, insecure):
     from databricks_cli.configure import adal_utils
 
-    # profile = DEFAULT_SECTION if profile is None else profile
+    profile = DEFAULT_SECTION if profile is None else profile
     config = ProfileConfigProvider(profile).get_config() or DatabricksConfig.empty()
     if config.tenant_id:
         default_tenant_id = config.tenant_id

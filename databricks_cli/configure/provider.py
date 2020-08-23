@@ -250,7 +250,7 @@ class EnvironmentVariableConfigProvider(DatabricksConfigProvider):
         org_id = os.environ.get('DATABRICKS_ORG_ID')
         insecure = os.environ.get('DATABRICKS_INSECURE')
         config = DatabricksConfig(host, username, password, token, None, 
-                                  None, org_id, None, insecure)
+                                  None, None, org_id, None, insecure)
         if config.is_valid:
             return config
         return None
