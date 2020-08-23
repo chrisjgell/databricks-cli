@@ -31,9 +31,12 @@ from databricks_cli.utils import CONTEXT_SETTINGS
 from databricks_cli.configure.config import profile_option, get_profile_from_context, debug_option
 
 PROMPT_HOST = 'Databricks Host (should begin with https://)'
+PROMPT_TENANT_ID = 'Azure Tenant ID'
+PROMPT_ORG_ID = 'Azure Databricks Org ID'
 PROMPT_USERNAME = 'Username'
 PROMPT_PASSWORD = 'Password' #  NOQA
 PROMPT_TOKEN = 'Token' #  NOQA
+PROMPT_CLIENT_ID = 'Service Principal Client ID' #  NOQA
 
 
 def _configure_cli_token(profile, insecure):
@@ -60,13 +63,39 @@ def _configure_cli_password(profile, insecure):
     update_and_persist_config(profile, new_config)
 
 
+def _configure_azure_ad(profile, insecure):
+    from databricks_cli.configure import adal_utils
+
+    # profile = DEFAULT_SECTION if profile is None else profile
+    config = ProfileConfigProvider(profile).get_config() or DatabricksConfig.empty()
+    if config.tenant_id:
+        default_tenant_id = config.tenant_id
+    else:
+        default_tenant_id = "common"
+    
+    host = click.prompt(PROMPT_HOST, default=config.host, type=_DbfsHost())
+    tenant_id = click.prompt(PROMPT_TENANT_ID, default=default_tenant_id, type=str)
+    org_id = click.prompt(PROMPT_ORG_ID, default=config.org_id, type=str)
+    client_id = click.prompt(PROMPT_CLIENT_ID, default=config.client_id)
+    username = click.prompt(PROMPT_USERNAME, default=config.username)
+    password = click.prompt(PROMPT_PASSWORD, default="", hide_input=True)
+    ad_token = adal_utils.adal_user_auth(authority=tenant_id, resource=adal_utils.AZURE_DATABRICKS_RESOURCE_ID,
+                                         client_id=client_id, username=username,
+                                         password=password, verify_ssl=(not bool(insecure)))
+    new_config = DatabricksConfig.from_adal_token(host, username, ad_token['accessToken'],
+                                                  ad_token['refreshToken'], ad_token['expiresOn'],
+                                                  tenant_id, org_id, client_id, insecure)
+    update_and_persist_config(profile, new_config)
+
+
 @click.command(context_settings=CONTEXT_SETTINGS,
                short_help='Configures host and authentication info for the CLI.')
 @click.option('--token', show_default=True, is_flag=True, default=False)
+@click.option('--azure-ad', show_default=True, is_flag=True, default=False)
 @click.option('--insecure', show_default=True, is_flag=True, default=None)
 @debug_option
 @profile_option
-def configure_cli(token, insecure):
+def configure_cli(token, azure_ad, insecure):
     """
     Configures host and authentication info for the CLI.
     """
@@ -74,6 +103,8 @@ def configure_cli(token, insecure):
     insecure_str = str(insecure) if insecure is not None else None
     if token:
         _configure_cli_token(profile, insecure_str)
+    elif azure_ad:
+        _configure_azure_ad(profile, insecure_str)
     else:
         _configure_cli_password(profile, insecure_str)
 

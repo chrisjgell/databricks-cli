@@ -40,6 +40,9 @@ setup(
         'six>=1.10.0',
         'configparser>=0.3.5;python_version < "3.6"',
     ],
+    extras_require={
+        'azure-ad': ['adal==1.2.4']
+    },
     entry_points='''
         [console_scripts]
         databricks=databricks_cli.cli:cli

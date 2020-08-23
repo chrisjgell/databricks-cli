@@ -35,6 +35,11 @@ HOST = 'host'
 USERNAME = 'username'
 PASSWORD = 'password' # NOQA
 TOKEN = 'token'
+REFRESH_TOKEN = 'refresh_token'
+TOKEN_EXPIRES_ON = 'token_expires_on'
+TENANT_ID = 'tenant_id'
+ORG_ID = 'org_id'
+CLIENT_ID = 'client_id'
 INSECURE = 'insecure'
 DEFAULT_SECTION = 'DEFAULT'
 
@@ -96,6 +101,11 @@ def update_and_persist_config(profile, databricks_config):
     _set_option(raw_config, profile, USERNAME, databricks_config.username)
     _set_option(raw_config, profile, PASSWORD, databricks_config.password)
     _set_option(raw_config, profile, TOKEN, databricks_config.token)
+    _set_option(raw_config, profile, REFRESH_TOKEN, databricks_config.refresh_token)
+    _set_option(raw_config, profile, TOKEN_EXPIRES_ON, databricks_config.token_expires_on)
+    _set_option(raw_config, profile, TENANT_ID, databricks_config.tenant_id)
+    _set_option(raw_config, profile, ORG_ID, databricks_config.org_id)
+    _set_option(raw_config, profile, CLIENT_ID, databricks_config.client_id)
     _set_option(raw_config, profile, INSECURE, databricks_config.insecure)
     _overwrite_config(raw_config)
 
@@ -237,8 +247,10 @@ class EnvironmentVariableConfigProvider(DatabricksConfigProvider):
         username = os.environ.get('DATABRICKS_USERNAME')
         password = os.environ.get('DATABRICKS_PASSWORD')
         token = os.environ.get('DATABRICKS_TOKEN')
+        org_id = os.environ.get('DATABRICKS_ORG_ID')
         insecure = os.environ.get('DATABRICKS_INSECURE')
-        config = DatabricksConfig(host, username, password, token, insecure)
+        config = DatabricksConfig(host, username, password, token, None, 
+                                  None, org_id, None, insecure)
         if config.is_valid:
             return config
         return None
@@ -255,32 +267,47 @@ class ProfileConfigProvider(DatabricksConfigProvider):
         username = _get_option_if_exists(raw_config, self.profile, USERNAME)
         password = _get_option_if_exists(raw_config, self.profile, PASSWORD)
         token = _get_option_if_exists(raw_config, self.profile, TOKEN)
+        refresh_token = _get_option_if_exists(raw_config, self.profile, REFRESH_TOKEN)
+        token_expires_on = _get_option_if_exists(raw_config, self.profile, TOKEN_EXPIRES_ON)
+        tenant_id = _get_option_if_exists(raw_config, self.profile, TENANT_ID)
+        org_id = _get_option_if_exists(raw_config, self.profile, ORG_ID)
+        client_id = _get_option_if_exists(raw_config, self.profile, CLIENT_ID)
         insecure = _get_option_if_exists(raw_config, self.profile, INSECURE)
-        config = DatabricksConfig(host, username, password, token, insecure)
+        config = DatabricksConfig(host, username, password, token, refresh_token, token_expires_on, tenant_id, org_id, client_id, insecure)
         if config.is_valid:
             return config
         return None
 
 
 class DatabricksConfig(object):
-    def __init__(self, host, username, password, token, insecure): # noqa
+    def __init__(self, host, username, password, token, refresh_token, token_expires_on, tenant_id, org_id, client_id, insecure): # noqa
         self.host = host
         self.username = username
         self.password = password
         self.token = token
+        self.refresh_token = refresh_token
+        self.token_expires_on = token_expires_on
+        self.tenant_id = tenant_id
+        self.org_id = org_id
+        self.client_id = client_id
         self.insecure = insecure
 
     @classmethod
     def from_token(cls, host, token, insecure=None):
-        return DatabricksConfig(host, None, None, token, insecure)
+        return DatabricksConfig(host, None, None, token, None, None, None, None, None, insecure)
+
+    @classmethod
+    def from_adal_token(cls, host, username, token, refresh_token, token_expires_on, tenant_id, org_id, client_id, insecure=None):
+        return DatabricksConfig(host, username, None, token, refresh_token, 
+                                token_expires_on, tenant_id, org_id, client_id, insecure)
 
     @classmethod
     def from_password(cls, host, username, password, insecure=None):
-        return DatabricksConfig(host, username, password, None, insecure)
+        return DatabricksConfig(host, username, password, None, None, None, None, None, None, insecure)
 
     @classmethod
     def empty(cls):
-        return DatabricksConfig(None, None, None, None, None)
+        return DatabricksConfig(None, None, None, None, None, None, None, None, None, None)
 
     @property
     def is_valid_with_token(self):
